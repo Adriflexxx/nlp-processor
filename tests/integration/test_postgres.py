@@ -95,3 +95,22 @@ def test_fiches_et_vecteurs_en_base(tmp_path, export_synthetique, pool):
     assert len(fiches.lire_controle(config.empreinte)) == 15
     with pool.connection() as cnx:
         assert cnx.execute("SELECT count(*) FROM configurations").fetchone()[0] == 2
+
+
+def test_evaluations_et_predictions_en_base(pool):
+    from demandes.adaptateurs.sortants.postgres.depots_evaluation import DepotEvaluationsPostgres, DepotPredictionsPostgres
+
+    evals = DepotEvaluationsPostgres(pool)
+    evals.enregistrer_evaluation("jeu1", "seul__svm_tfidf", {"test": {"ensemble": {"top1": 0.9}}})
+    evals.enregistrer_evaluation("jeu1", "seul__svm_tfidf", {"test": {"ensemble": {"top1": 0.91}}})  # remplace
+    evals.enregistrer_evaluation("jeu2", "temporel", {"n_test": 10})
+    assert [e["nom"] for e in evals.lister_evaluations()] == ["temporel"]  # dernier jeu évalué
+    assert evals.lister_evaluations("jeu1")[0]["test"]["ensemble"]["top1"] == 0.91
+
+    preds = DepotPredictionsPostgres(pool)
+    i = preds.journaliser("mail", {"nom": "x"}, [{"titre": "T", "probabilite": 0.9}], "haut", [])
+    assert preds.lister(avec_retour=True) == [] and preds.enregistrer_retour(i, "T", "op")
+    assert not preds.enregistrer_retour(10**9, "T", None)
+    lue = preds.lire(i)
+    assert lue.titre_retenu == "T" and lue.operateur == "op" and lue.retenu_le is not None
+    assert [p.id for p in preds.lister(avec_retour=True)] == [i]

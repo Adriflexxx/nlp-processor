@@ -121,6 +121,42 @@ class DepotVecteurs(Protocol):
         ...
 
 
+class DepotEvaluations(Protocol):
+    def enregistrer_evaluation(self, empreinte_jeu: str, nom: str, contenu: dict[str, Any]) -> None:
+        """Remplace l'évaluation `nom` de ce jeu (une combinaison, ou le contrôle dans le temps)."""
+        ...
+
+    def lister_evaluations(self, empreinte_jeu: str | None = None) -> list[dict[str, Any]]:
+        """Évaluations (du jeu donné, sinon du dernier jeu évalué), les plus récentes d'abord."""
+        ...
+
+
+@dataclass(slots=True)
+class PredictionJournal:
+    id: int
+    horodatage: datetime
+    mail: str
+    configuration: dict[str, Any]
+    top3: list[dict[str, Any]]
+    niveau: str
+    avis: list[dict[str, Any]]
+    titre_retenu: str | None = None
+    operateur: str | None = None
+    retenu_le: datetime | None = None
+
+
+class DepotPredictions(Protocol):
+    def journaliser(self, mail: str, configuration: dict, top3: list, niveau: str, avis: list) -> int: ...
+
+    def enregistrer_retour(self, prediction_id: int, titre_retenu: str, operateur: str | None) -> bool:
+        """Titre retenu par l'opérateur ; False si la prédiction n'existe pas."""
+        ...
+
+    def lire(self, prediction_id: int) -> PredictionJournal | None: ...
+
+    def lister(self, depuis: datetime | None = None, avec_retour: bool | None = None) -> list[PredictionJournal]: ...
+
+
 StatutTache = str  # "en_attente" | "en_cours" | "terminee" | "echec"
 
 

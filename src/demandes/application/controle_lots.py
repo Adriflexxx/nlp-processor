@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import random
 import unicodedata
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -60,6 +61,7 @@ class ControleLots:
         artefacts: StockageArtefacts,
         parametres: ParametresFiches,
         graine: int,
+        numeros_test: Callable[[], set[str]] | None = None,
     ) -> None:
         self.corpus = corpus
         self.fiches = fiches
@@ -68,6 +70,9 @@ class ControleLots:
         self.artefacts = artefacts
         self.parametres = parametres
         self.graine = graine
+        # Demandes du jeu de test : tirées en priorité, pour que le volet rl_emb (évaluer)
+        # porte sur des demandes que le modèle n'a pas vues à l'entraînement.
+        self.numeros_test = numeros_test
 
     def executer(self, suivi: Suivi, taille: int = 200) -> ResultatControle:
         suivi.demarrer(["échantillon", "fiches à l'unité", "comparaison"])
@@ -89,12 +94,20 @@ class ControleLots:
         }
         if not en_lot:
             raise ValueError("aucune fiche produite en lot pour cette configuration : lancer d'abord l'ingestion")
-        echantillon = sorted(random.Random(self.graine).sample(sorted(en_lot), min(taille, len(en_lot))))
+        rng = random.Random(self.graine)
+        test = self.numeros_test() if self.numeros_test else set()
+        prioritaires = sorted(n for n in en_lot if n in test)
+        autres = sorted(n for n in en_lot if n not in test)
+        echantillon = rng.sample(prioritaires, min(taille, len(prioritaires)))
+        if len(echantillon) < taille:
+            echantillon += rng.sample(autres, min(taille - len(echantillon), len(autres)))
+        echantillon = sorted(echantillon)
         deja = await asyncio.to_thread(self.fiches.lire_controle, emp)
         deja = {n: f for n, f in deja.items() if n in en_lot and f.empreinte_mail == en_lot[n].empreinte_mail}
         a_faire = [n for n in echantillon if n not in deja]
         suivi.info(
-            f"{len(echantillon)} demandes tirées (graine {self.graine}) parmi {len(en_lot)} fiches produites en lot ; "
+            f"{len(echantillon)} demandes tirées (graine {self.graine}) parmi {len(en_lot)} fiches produites en lot, "
+            f"dont {sum(1 for n in echantillon if n in test)} du jeu de test ; "
             f"{len(deja)} fiches à l'unité déjà faites, {len(a_faire)} à produire"
         )
 

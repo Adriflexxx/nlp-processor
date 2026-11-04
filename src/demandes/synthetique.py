@@ -24,6 +24,17 @@ TITRES: dict[str, tuple[str, str, list[str]]] = {
     "Réinitialisation mot de passe SAGA": ("SAGA", "réinitialiser", ["mot de passe", "bloqué", "réinitialiser", "verrouillé"]),
     "Demande d'information INFOCENTRE": ("INFOCENTRE", "demander", ["indicateur", "tableau de bord", "requête", "chiffres"]),
 }
+# Titres voisins : leurs mails libres partagent du vocabulaire (sources de confusion réalistes).
+VOISINS = {
+    "Création de compte SAGA": "Suppression de compte SAGA",
+    "Suppression de compte SAGA": "Création de compte SAGA",
+    "Habilitation PORTAIL RH": "Retrait d'habilitation PORTAIL RH",
+    "Retrait d'habilitation PORTAIL RH": "Habilitation PORTAIL RH",
+    "Anomalie export FACTO": "Modification référentiel FACTO",
+    "Modification référentiel FACTO": "Anomalie export FACTO",
+    "Réinitialisation mot de passe SAGA": "Création de compte SAGA",
+    "Demande d'information INFOCENTRE": "Anomalie export FACTO",
+}
 # Titre rare : doit finir dans les petites catégories.
 TITRE_RARE = "Purge historique ARCHIVE"
 
@@ -64,6 +75,9 @@ LIAISONS = ["au sujet de", "concernant", "pour", "à propos de", "sur"]
 DEMANDES = [
     "il faudrait {action} ce qui suit", "merci de {action} rapidement", "est-il possible de {action}",
     "je souhaite {action}", "pouvez-vous {action} dès que possible", "nous avons besoin de {action}",
+    # Formulations génériques : le verbe d'action n'aide pas, seul le vocabulaire compte.
+    "pouvez-vous regarder", "merci de faire le nécessaire", "pourriez-vous traiter ce point",
+    "j'ai besoin d'un coup de main", "pouvez-vous voir ce qu'il est possible de faire", "merci de vérifier",
 ]
 PRECISIONS = [
     "C'est pour {personne} du service {service}.", "Le besoin date de {date}.", "Merci de me tenir au courant.",
@@ -80,7 +94,17 @@ def _signature(personne: str, service: str) -> str:
 
 def _mail(rng: random.Random, titre: str, application: str, action: str, mots: list[str], date: datetime) -> str:
     personne, service = rng.choice(PERSONNES), rng.choice(SERVICES)
-    choisis = ", ".join(rng.sample(mots, k=min(len(mots), rng.randint(2, 3))))
+    propres = rng.sample(mots, k=min(len(mots), rng.randint(1, 3)))
+    voisin = VOISINS.get(titre)
+    if voisin:
+        # Mails libres : du vocabulaire du Titre voisin ; parfois (10 %) surtout lui (mail trompeur).
+        mots_voisin = TITRES[voisin][2]
+        if rng.random() < 0.10:
+            propres = propres[:1] + rng.sample(mots_voisin, k=2)
+        elif rng.random() < 0.5:
+            propres.append(rng.choice(mots_voisin))
+        rng.shuffle(propres)
+    choisis = ", ".join(propres)
     valeurs = {
         "application": application, "action": action, "mots": choisis, "personne": rng.choice(PERSONNES),
         "service": rng.choice(SERVICES), "date": (date + timedelta(days=7)).strftime("%d/%m/%Y"),

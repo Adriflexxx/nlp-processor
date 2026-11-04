@@ -11,7 +11,7 @@ import numpy as np
 
 from demandes.domaine.demande import Demande, LigneEcartee
 from demandes.domaine.referentiel import EntreeCartographie
-from demandes.ports.depots import EchecFiche, EntreeJournal, FicheStockee, InfoImport, Tache
+from demandes.ports.depots import EchecFiche, EntreeJournal, FicheStockee, InfoImport, PredictionJournal, Tache
 
 
 class DepotCorpusMemoire:
@@ -157,3 +157,49 @@ class DepotVecteursMemoire:
         if not retenus:
             return [], np.zeros((0, 0), dtype=np.float32)
         return [n for n, _ in retenus], np.vstack([v for _, v in retenus])
+
+
+class DepotEvaluationsMemoire:
+    def __init__(self) -> None:
+        self.evaluations: dict[tuple[str, str], dict] = {}
+        self._ordre: list[tuple[str, str]] = []
+
+    def enregistrer_evaluation(self, empreinte_jeu, nom, contenu) -> None:
+        cle = (empreinte_jeu, nom)
+        self.evaluations[cle] = {"empreinte_jeu": empreinte_jeu, "nom": nom, **contenu}
+        if cle in self._ordre:
+            self._ordre.remove(cle)
+        self._ordre.append(cle)
+
+    def lister_evaluations(self, empreinte_jeu=None):
+        if empreinte_jeu is None and self._ordre:
+            empreinte_jeu = self._ordre[-1][0]
+        return [self.evaluations[c] for c in reversed(self._ordre) if c[0] == empreinte_jeu]
+
+
+class DepotPredictionsMemoire:
+    def __init__(self) -> None:
+        self.predictions: dict[int, PredictionJournal] = {}
+
+    def journaliser(self, mail, configuration, top3, niveau, avis) -> int:
+        identifiant = len(self.predictions) + 1
+        self.predictions[identifiant] = PredictionJournal(
+            identifiant, datetime.now(UTC), mail, configuration, top3, niveau, avis
+        )
+        return identifiant
+
+    def enregistrer_retour(self, prediction_id, titre_retenu, operateur) -> bool:
+        p = self.predictions.get(prediction_id)
+        if p is None:
+            return False
+        p.titre_retenu, p.operateur, p.retenu_le = titre_retenu, operateur, datetime.now(UTC)
+        return True
+
+    def lire(self, prediction_id):
+        return self.predictions.get(prediction_id)
+
+    def lister(self, depuis=None, avec_retour=None):
+        sortie = [p for p in self.predictions.values() if depuis is None or p.horodatage >= depuis]
+        if avec_retour is not None:
+            sortie = [p for p in sortie if (p.titre_retenu is not None) == avec_retour]
+        return sorted(sortie, key=lambda p: p.id)

@@ -107,6 +107,125 @@ def controle_lots(taille: int = typer.Option(200, help="Nombre de demandes de l'
         c.fermer()
 
 
+def _lancer(type_tache: str, parametres: dict) -> dict:
+    c = _conteneur()
+    try:
+        c.migrer()
+        tache, resultat = c.executeur.executer_maintenant(type_tache, parametres)
+        typer.echo(f"\nTâche {tache.id}")
+        return resultat
+    finally:
+        c.fermer()
+
+
+def _liste(valeur: str | None) -> list[str] | None:
+    return [m.strip() for m in valeur.split(",") if m.strip()] if valeur else None
+
+
+@app.command()
+def entrainer(
+    modeles: str = typer.Option(None, help="Modèles à entraîner, séparés par des virgules (défaut : les 5)"),
+) -> None:
+    """Validation croisée, prédictions hors pli et modèles finaux (cache par modèle). TF-IDF : aucun appel au LLM."""
+    _afficher(_lancer("entrainer", {"modeles": _liste(modeles)}))
+
+
+@app.command()
+def evaluer(
+    mode: str = typer.Option(None, help="Combinaison précise : seul, moyenne ou meta (avec --modeles)"),
+    modeles: str = typer.Option(None, help="Modèles de la combinaison précise, séparés par des virgules"),
+    temporel: bool = typer.Option(False, help="Contrôle dans le temps : 11 premiers mois / dernier mois"),
+) -> None:
+    """Évalue les 13 combinaisons (ou une combinaison choisie) : mesures, seuils, décisions."""
+    if bool(mode) != bool(modeles):
+        raise typer.BadParameter("--mode et --modeles vont ensemble")
+    resultat = _lancer("evaluer", {"mode": mode, "modeles": _liste(modeles), "temporel": temporel})
+    typer.echo("\nClassement (jeu de test) :")
+    for i, e in enumerate(resultat["classement"], start=1):
+        libres = "—" if e["top1_libre"] is None else f"{e['top1_libre']:.3f}"
+        typer.echo(
+            f"{i:2}. {e['libelle']:42} top 1 {e['top1_test']:.3f}  top 3 {e['top3_test']:.3f}  "
+            f"libres {libres}  seuils {e['seuils']['haut']:.2f} / {e['seuils']['moyen']:.2f}"
+        )
+
+
+@app.command()
+def rapport() -> None:
+    """Rapport Markdown : classement, graphiques, recommandation et seuils."""
+    resultat = _lancer("rapport", {})
+    r = resultat["recommandation"]
+    typer.echo(f"Rapport : {resultat['rapport']}")
+    typer.echo(f"Configuration retenue : {r['libelle']} — MODE={r['mode']} MODELES={','.join(r['modeles'])}")
+    typer.echo(f"Seuils : haut {r['seuils']['haut']:.2f}, moyen {r['seuils']['moyen']:.2f} ({r['seuils']['source']})")
+
+
+@app.command()
+def predire(
+    mail: str = typer.Argument(None, help="Texte du mail (ou --fichier)"),
+    fichier: Path = typer.Option(None, exists=True, dir_okay=False, help="Fichier texte contenant le mail"),
+) -> None:
+    """Prédit le Titre d'un nouveau mail : top 3, niveau de confiance, avis de chaque modèle."""
+    texte = fichier.read_text(encoding="utf-8") if fichier else mail
+    if not texte:
+        raise typer.BadParameter("donner le mail en argument ou avec --fichier")
+    from demandes.application.predire import ConfigurationIndisponible
+
+    c = _conteneur()
+    try:
+        c.migrer()
+        r = c.prediction.predire(texte)
+    except ConfigurationIndisponible as erreur:
+        typer.echo(f"Configuration indisponible : {erreur}", err=True)
+        raise typer.Exit(1) from erreur
+    finally:
+        c.fermer()
+    typer.echo(f"Prédiction n° {r.id} — niveau : {r.niveau.upper()}" + (" (modèles en désaccord)" if r.desaccord else ""))
+    for i, t in enumerate(r.top3, start=1):
+        typer.echo(f"  {i}. {t['titre']:50} {t['probabilite']:.3f}")
+    typer.echo("Avis des modèles :")
+    for a in r.avis:
+        typer.echo(f"  {a['modele']:10} {a['titre']:50} {a['probabilite']:.3f}")
+    for remarque in r.remarques:
+        typer.echo(f"Remarque : {remarque}")
+    typer.echo(f"Configuration : {r.configuration['nom']} ; retour opérateur : demandes retour {r.id} \"<Titre retenu>\"")
+
+
+@app.command()
+def retour(
+    prediction_id: int, titre: str, operateur: str = typer.Option(None, help="Opérateur qui a validé")
+) -> None:
+    """Enregistre le Titre retenu par l'opérateur pour une prédiction."""
+    from demandes.application.retours import PredictionInconnue
+
+    c = _conteneur()
+    try:
+        c.migrer()
+        r = c.retours.enregistrer(prediction_id, titre, operateur)
+    except (PredictionInconnue, ValueError) as erreur:
+        typer.echo(f"Retour refusé : {erreur}", err=True)
+        raise typer.Exit(1) from erreur
+    finally:
+        c.fermer()
+    rang = f"rang {r['rang_dans_le_top3']} du top 3" if r["rang_dans_le_top3"] else "hors du top 3"
+    typer.echo(f"Retour enregistré pour la prédiction {prediction_id} : « {r['titre_retenu']} » ({rang})")
+
+
+@app.command("exporter-retours")
+def exporter_retours(
+    sortie: Path = typer.Option(Path("donnees/retours.xlsx"), help="Fichier Excel à écrire"),
+    mois: int = typer.Option(12, help="Fenêtre glissante, en mois"),
+) -> None:
+    """Exporte les prédictions validées (fenêtre glissante) au format de l'export, rechargeable par « charger »."""
+    c = _conteneur()
+    try:
+        c.migrer()
+        r = c.retours.exporter(sortie, mois)
+    finally:
+        c.fermer()
+    exactitude = "—" if r["exactitude_top1_en_production"] is None else f"{r['exactitude_top1_en_production']:.1%}"
+    typer.echo(f"{r['n']} retours depuis le {r['depuis']} écrits dans {r['fichier']} (top 1 juste en production : {exactitude})")
+
+
 @app.command()
 def taches(limite: int = typer.Option(20, help="Nombre de tâches à afficher")) -> None:
     """Liste les dernières tâches (lancées par la CLI ou par l'API)."""

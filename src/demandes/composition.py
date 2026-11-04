@@ -19,6 +19,8 @@ from demandes.adaptateurs.sortants.postgres.depots import (
     DepotReferentielPostgres,
     DepotTachesPostgres,
 )
+from demandes.adaptateurs.sortants.graphiques import GraphiquesMatplotlib
+from demandes.adaptateurs.sortants.postgres.depots_evaluation import DepotEvaluationsPostgres, DepotPredictionsPostgres
 from demandes.adaptateurs.sortants.postgres.depots_fiches import DepotFichesPostgres, DepotVecteursPostgres
 from demandes.adaptateurs.sortants.simulateurs import GenerateurFichesSimule, VectoriseurSimule
 from demandes.adaptateurs.sortants.suivi_taches import SuiviTache
@@ -27,7 +29,14 @@ from demandes.application.controle_lots import ControleLots
 from demandes.application.empreintes import ConfigFiche
 from demandes.application.generer_fiches import ETAPES as ETAPES_FICHES
 from demandes.application.generer_fiches import ParametresFiches, ProductionFiches
+from demandes.application.entrainer import Entrainement, ParametresEntrainement
+from demandes.application.evaluer import Evaluation, ParametresEvaluation
+from demandes.application.jeu import construire_jeu
+from demandes.application.predire import ParametresPrediction, Prediction
+from demandes.application.rapporter import ParametresRapport, Rapport
+from demandes.application.retours import ColonnesExport, Retours
 from demandes.application.taches import ExecuteurTaches
+from demandes.domaine.combinaison import lire_combinaison
 from demandes.config import Settings, obtenir_settings
 from demandes.parallele import limiter_threads_blas
 from demandes.ports.suivi import Suivi
@@ -75,6 +84,18 @@ class Conteneur:
     @cached_property
     def depot_vecteurs(self) -> DepotVecteursPostgres:
         return DepotVecteursPostgres(self.pool)
+
+    @cached_property
+    def depot_evaluations(self) -> DepotEvaluationsPostgres:
+        return DepotEvaluationsPostgres(self.pool)
+
+    @cached_property
+    def depot_predictions(self) -> DepotPredictionsPostgres:
+        return DepotPredictionsPostgres(self.pool)
+
+    @cached_property
+    def graphiques(self) -> GraphiquesMatplotlib:
+        return GraphiquesMatplotlib()
 
     @cached_property
     def artefacts(self) -> StockageFichiers:
@@ -131,12 +152,67 @@ class Conteneur:
             self.config_fiche, self.artefacts, ParametresFiches.depuis(self.settings),
         )
 
+    def _numeros_test(self) -> set[str]:
+        s = self.settings
+        try:
+            jeu = construire_jeu(self.depot_corpus.lister_demandes(), s.min_par_titre, s.taille_test, s.n_plis, s.seed)
+        except ValueError:
+            return set()
+        return set(jeu.numeros[jeu.test].tolist())
+
     @cached_property
     def controle_lots(self) -> ControleLots:
         return ControleLots(
             self.depot_corpus, self.depot_fiches, self.generateur_fiches, self.config_fiche, self.artefacts,
-            ParametresFiches.depuis(self.settings), self.settings.seed,
+            ParametresFiches.depuis(self.settings), self.settings.seed, self._numeros_test,
         )
+
+    @cached_property
+    def entrainement(self) -> Entrainement:
+        s = self.settings
+        return Entrainement(
+            self.depot_corpus, self.depot_vecteurs, self.artefacts,
+            ParametresEntrainement(
+                s.min_par_titre, s.taille_test, s.n_plis, s.seed, s.n_processus, s.tfidf_caracteres,
+                s.liste_acp_dimensions,
+            ),
+            self.production_fiches.config_vecteur.empreinte,
+        )
+
+    @cached_property
+    def evaluation(self) -> Evaluation:
+        s = self.settings
+        return Evaluation(
+            self.entrainement, self.depot_evaluations, self.artefacts,
+            ParametresEvaluation(
+                s.meta_modele, s.cible_precision_haut, s.cible_top3_moyen, s.desaccord_bloque,
+                s.seuil_haut, s.seuil_moyen, s.seed, s.n_processus,
+            ),
+            self.depot_fiches, self.vectoriseur, self.config_fiche.empreinte,
+        )
+
+    @cached_property
+    def rapport(self) -> Rapport:
+        s = self.settings
+        return Rapport(
+            self.entrainement, self.depot_evaluations, self.artefacts, self.graphiques,
+            ParametresRapport(s.reference, s.gain_min, self.generateur_fiches.modele, self.vectoriseur.modele),
+        )
+
+    @cached_property
+    def prediction(self) -> Prediction:
+        s = self.settings
+        return Prediction(
+            self.depot_evaluations, self.depot_predictions, self.artefacts, self.generateur_fiches, self.vectoriseur,
+            ParametresPrediction(
+                s.mode, tuple(s.liste_modeles), s.mail_max_caracteres, s.seuil_haut, s.seuil_moyen, s.desaccord_bloque
+            ),
+        )
+
+    @cached_property
+    def retours(self) -> Retours:
+        s = self.settings
+        return Retours(self.depot_predictions, ColonnesExport(s.colonne_numero, s.colonne_titre, s.colonne_mail, s.colonne_date))
 
     def _action_charger(self, parametres: dict[str, Any], suivi: Suivi) -> dict[str, Any]:
         avec_fiches = parametres.get("avec_fiches")
@@ -163,6 +239,18 @@ class Conteneur:
     def _action_controle_lots(self, parametres: dict[str, Any], suivi: Suivi) -> dict[str, Any]:
         return self.controle_lots.executer(suivi, int(parametres.get("taille", 200))).en_dict()
 
+    def _action_entrainer(self, parametres: dict[str, Any], suivi: Suivi) -> dict[str, Any]:
+        return self.entrainement.executer(suivi, parametres.get("modeles") or None).en_dict()
+
+    def _action_evaluer(self, parametres: dict[str, Any], suivi: Suivi) -> dict[str, Any]:
+        combinaisons = None
+        if parametres.get("mode") and parametres.get("modeles"):
+            combinaisons = [lire_combinaison(parametres["mode"], parametres["modeles"])]
+        return self.evaluation.executer(suivi, combinaisons, bool(parametres.get("temporel", False)))
+
+    def _action_rapport(self, parametres: dict[str, Any], suivi: Suivi) -> dict[str, Any]:
+        return self.rapport.executer(suivi)
+
     @cached_property
     def executeur(self) -> ExecuteurTaches:
         return ExecuteurTaches(
@@ -172,6 +260,9 @@ class Conteneur:
                 "charger": self._action_charger,
                 "fiches": self._action_fiches,
                 "controle_lots": self._action_controle_lots,
+                "entrainer": self._action_entrainer,
+                "evaluer": self._action_evaluer,
+                "rapport": self._action_rapport,
             },
         )
 

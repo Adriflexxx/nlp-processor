@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from demandes.adaptateurs.entrants.api.routes import corpus, taches
+from demandes.adaptateurs.entrants.api.routes import corpus, prediction, taches
 from demandes.composition import Conteneur, configurer_journal
 
 
@@ -37,6 +37,7 @@ def creer_app(conteneur: Conteneur | None = None) -> FastAPI:
 
     app.include_router(taches.routeur)
     app.include_router(corpus.routeur)
+    app.include_router(prediction.routeur)
     return app
 
 

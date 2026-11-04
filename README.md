@@ -9,11 +9,10 @@ et l'opérateur valide toujours.
 | Étape | Commande | État |
 |---|---|---|
 | 1. Chargement, contrôles, cartographie, templates | `charger` | ✅ |
-| 3a. Fiches IAG par lots, embeddings, cache, contrôle lot / unité | `charger`, `fiches`, `controle-lots` | ✅ |
-| 2. Branche TF-IDF, `svm_tfidf`, `rl_tfidf` : premier score sans LLM | `entrainer`, `evaluer` | à venir |
-| 3b. Modèles `svm_emb`, `rl_emb`, `knn_emb` | `entrainer`, `evaluer` | à venir |
-| 4. Prédictions hors pli, modes `moyenne` et `meta`, 13 combinaisons | `evaluer` | à venir |
-| 5. Rapport, seuils, prédiction d'un nouveau mail | `rapport`, `predire` | à venir |
+| 2. Branche TF-IDF (`svm_tfidf`, `rl_tfidf`) : premier score sans LLM | `entrainer`, `evaluer` | ✅ |
+| 3. Fiches IAG par lots, embeddings, cache ; `svm_emb`, `rl_emb`, `knn_emb` ; contrôle lot / unité | `charger`, `fiches`, `controle-lots`, `entrainer` | ✅ |
+| 4. Prédictions hors pli, modes `moyenne` et `meta`, 13 combinaisons | `evaluer` | ✅ |
+| 5. Rapport, seuils, prédiction d'un nouveau mail, boucle de retour | `rapport`, `predire`, `retour`, `exporter-retours` | ✅ |
 
 ## Installation
 
@@ -43,7 +42,12 @@ Les valeurs commentées sont dans [.env.exemple](.env.exemple). Les principales 
   `FICHES_PAR_APPEL` (10 ; 1 = un mail par appel), `LOT_MAX_CARACTERES`, `MAIL_MAX_CARACTERES`,
   `IAG_MAX_TOKENS_PAR_FICHE`, `EMBED_PAR_APPEL` (100), `FICHES_A_L_INGESTION` ;
 - **Apprentissage** : `SEED`, `MIN_PAR_TITRE`, `N_PLIS`, `TAILLE_TEST`, `N_JOBS`, `LLM_CONCURRENCY` ;
-- **Décision** : `MODE` (`seul`, `moyenne`, `meta`), `MODELES`, `SEUIL_HAUT`, `SEUIL_MOYEN` ;
+- **Protocole** ([ADR-0015](docs/adr/0015-protocole-et-modeles-de-base.md)) : `TFIDF_CARACTERES`,
+  `ACP_DIMENSIONS` (256,512,1024), `META_MODELE` (`rl` ou `gb`) ;
+- **Décision** ([ADR-0016](docs/adr/0016-combinaisons-seuils-et-evaluation.md)) : `MODE` (`seul`,
+  `moyenne`, `meta`) et `MODELES` pour `predire` ; `SEUIL_HAUT` / `SEUIL_MOYEN` (vides = choisis sur
+  la courbe couverture / précision), `CIBLE_PRECISION_HAUT`, `CIBLE_TOP3_MOYEN`, `DESACCORD_BLOQUE` ;
+- **Rapport** : `REFERENCE` (combinaison la plus simple), `GAIN_MIN` (gain minimal pour retenir plus lourd) ;
 - **Templates** : `TEMPLATE_MIN_MAILS`, `TEMPLATE_FREQ_MAX`, `TEMPLATE_MIN_MARQUEURS`,
   `TEMPLATE_OBJET`, `TEMPLATE_MOTIFS`.
 
@@ -55,8 +59,30 @@ uv run demandes charger donnees/export.xlsx      # ingestion : contrôles, puis 
 uv run demandes charger donnees/export.xlsx --sans-fiches   # contrôles seuls, aucun appel à l'IAG
 uv run demandes fiches [--reprendre-echecs]      # fiches et embeddings manquants (après --sans-fiches)
 uv run demandes controle-lots --taille 200       # qualité : fiches en lot comparées à l'unité
+uv run demandes entrainer [--modeles svm_tfidf,rl_tfidf]   # validation croisée, hors pli, modèles finaux
+uv run demandes evaluer [--temporel]             # les 13 combinaisons : mesures, seuils, décisions
+uv run demandes evaluer --mode meta --modeles svm_tfidf,knn_emb   # une combinaison choisie à la main
+uv run demandes rapport                          # rapport Markdown, graphiques, recommandation
+uv run demandes predire --fichier mail.txt       # top 3, niveau de confiance, avis des modèles
+uv run demandes retour 12 "Titre retenu" --operateur op1   # boucle de retour
+uv run demandes exporter-retours --mois 12       # retours validés, au format de l'export
 uv run demandes taches                           # historique des tâches (CLI et API)
 ```
+
+**Premier score sans LLM** : `charger --sans-fiches`, puis `entrainer` (seule la branche TF-IDF est
+entraînée faute de vecteurs), puis `evaluer`.
+
+### Entraînement, évaluation, rapport
+
+- `entrainer` : pour chaque modèle, recherche de grille en validation croisée (5 plis, entraînement
+  seul), prédictions hors pli mises en cache, modèle final réentraîné sur tout l'entraînement. Le
+  cache est par modèle : relancer ne recalcule que ce qui a changé (grille, vecteurs, export).
+- `evaluer` : chaque combinaison est réglée sur les prédictions hors pli (quelques secondes, sans
+  réentraîner les modèles de base) ; seuils choisis hors pli ; mesures sur le test, pour l'ensemble,
+  les mails issus d'un template et les mails libres. `--temporel` : 11 premiers mois / dernier mois.
+- `rapport` : `artefacts/rapports/<jeu>/rapport.md`, avec les graphiques couverture / précision,
+  fiabilité et confusions, et la configuration recommandée (`MODE`, `MODELES`, seuils) à reporter
+  dans le `.env` pour `predire`.
 
 Pour tout essayer sans serveur IAG : `MOCK_LLM=true uv run demandes charger donnees/synthetique.xlsx`.
 
@@ -108,6 +134,12 @@ curl -N http://localhost:8000/taches/<id>/flux
 | `POST /taches/charger` | ingestion en tâche de fond (202) ; `"avec_fiches": false` pour sauter les fiches |
 | `POST /taches/fiches` | fiches et embeddings manquants (`"reprendre_echecs": true` pour retenter les échecs) |
 | `POST /taches/controle-lots` | contrôle qualité lot / unité (`"taille": 200`) |
+| `POST /taches/entrainer` | entraînement (`"modeles": [...]` facultatif) |
+| `POST /taches/evaluer` | 13 combinaisons, ou `"mode"` + `"modeles"` ; `"temporel": true` |
+| `POST /taches/rapport` | rapport et recommandation |
+| `GET /evaluations`, `GET /rapport` | synthèse des évaluations, dernier rapport (Markdown) |
+| `POST /predire` | `{"mail": "..."}` → top 3, niveau, avis des modèles (journalisé) |
+| `POST /predictions/{id}/retour`, `GET /predictions/{id}` | Titre retenu par l'opérateur, lecture du journal |
 | `GET /taches`, `GET /taches/{id}` | état des tâches (progression, étape, résultat) |
 | `GET /taches/{id}/journal?apres=N` | journal d'avancement détaillé (lignes nouvelles) |
 | `GET /taches/{id}/flux` | journal en direct (Server-Sent Events) |

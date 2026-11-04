@@ -57,6 +57,16 @@ class ParametresControle(BaseModel):
     taille: int = 200
 
 
+class ParametresEntrainer(BaseModel):
+    modeles: list[str] | None = None
+
+
+class ParametresEvaluer(BaseModel):
+    mode: str | None = None
+    modeles: list[str] | None = None
+    temporel: bool = False
+
+
 def _sortie(tache) -> TacheSortie:
     return TacheSortie(**{champ: getattr(tache, champ) for champ in TacheSortie.model_fields})
 
@@ -83,6 +93,27 @@ def lancer_fiches(parametres: ParametresFiches, c: Conteneur = Depends(conteneur
 def lancer_controle_lots(parametres: ParametresControle, c: Conteneur = Depends(conteneur)) -> TacheSortie:
     """Contrôle qualité : fiches en lot comparées aux fiches à l'unité sur un échantillon."""
     tache, _ = c.executeur.soumettre("controle_lots", parametres.model_dump())
+    return _sortie(tache)
+
+
+@routeur.post("/entrainer", response_model=TacheSortie, status_code=202)
+def lancer_entrainement(parametres: ParametresEntrainer, c: Conteneur = Depends(conteneur)) -> TacheSortie:
+    """Validation croisée, prédictions hors pli et modèles finaux (cache par modèle)."""
+    tache, _ = c.executeur.soumettre("entrainer", parametres.model_dump())
+    return _sortie(tache)
+
+
+@routeur.post("/evaluer", response_model=TacheSortie, status_code=202)
+def lancer_evaluation(parametres: ParametresEvaluer, c: Conteneur = Depends(conteneur)) -> TacheSortie:
+    """Les 13 combinaisons, ou une combinaison précise (mode + modeles) ; option temporel."""
+    tache, _ = c.executeur.soumettre("evaluer", parametres.model_dump())
+    return _sortie(tache)
+
+
+@routeur.post("/rapport", response_model=TacheSortie, status_code=202)
+def lancer_rapport(c: Conteneur = Depends(conteneur)) -> TacheSortie:
+    """Rapport Markdown, graphiques et recommandation."""
+    tache, _ = c.executeur.soumettre("rapport", {})
     return _sortie(tache)
 
 

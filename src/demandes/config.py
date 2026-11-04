@@ -19,7 +19,8 @@ MODELES_CONNUS = ("svm_tfidf", "rl_tfidf", "svm_emb", "rl_emb", "knn_emb")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # env_ignore_empty : une variable vide (SEUIL_HAUT=) garde la valeur par défaut.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True)
 
     # Base de données
     database_url: str = "postgresql://demandes:demandes@localhost:5433/demandes"
@@ -62,14 +63,30 @@ class Settings(BaseSettings):
     n_plis: int = Field(5, ge=2)
     llm_concurrency: int = Field(4, ge=1)
     n_jobs: int = -1
+    # Variante TF-IDF sur les caractères (char_wb, 3 à 5), en plus des mots et bigrammes
+    tfidf_caracteres: bool = False
+    # Dimensions testées pour la branche embedding (ACP ajustée sur l'entraînement seul) ;
+    # une valeur >= dimension du modèle = pas de réduction
+    acp_dimensions: str = "256,512,1024"
+    # Méta-classifieur : rl (régression logistique régularisée) ou gb (gradient boosting)
+    meta_modele: Literal["rl", "gb"] = "rl"
 
-    # Mode de décision
+    # Mode de décision (prédiction)
     mode: Literal["seul", "moyenne", "meta"] = "seul"
     modeles: str = "svm_tfidf"
 
-    # Seuils
-    seuil_haut: float = 0.80
-    seuil_moyen: float = 0.40
+    # Seuils : vides = choisis sur la courbe couverture / précision (validation croisée)
+    seuil_haut: float | None = None
+    seuil_moyen: float | None = None
+    # Précision visée : top 1 au-dessus du seuil haut, top 3 au-dessus du seuil moyen
+    cible_precision_haut: float = Field(0.95, gt=0, le=1)
+    cible_top3_moyen: float = Field(0.95, gt=0, le=1)
+    # Désaccord des modèles de base (top 1 différents) : aucune proposition
+    desaccord_bloque: bool = True
+
+    # Rapport : combinaison de référence et gain minimal pour retenir une combinaison plus lourde
+    reference: str = "svm_tfidf"
+    gain_min: float = Field(0.01, ge=0)
 
     # Repérage des templates
     template_min_mails: int = Field(5, ge=2)
@@ -96,6 +113,10 @@ class Settings(BaseSettings):
     @property
     def liste_modeles(self) -> list[str]:
         return _decouper(self.modeles, ",")
+
+    @property
+    def liste_acp_dimensions(self) -> list[int]:
+        return sorted({int(v) for v in _decouper(self.acp_dimensions, ",")})
 
     @property
     def liste_motifs_template(self) -> list[str]:
