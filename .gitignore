@@ -1,0 +1,14 @@
+# Données réelles et artefacts : les mails contiennent des données personnelles.
+donnees/*
+!donnees/.gitkeep
+artefacts/*
+!artefacts/.gitkeep
+
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+graphify-out/
+.claude

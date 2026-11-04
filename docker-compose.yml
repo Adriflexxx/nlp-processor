@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: demandes
+      POSTGRES_USER: demandes
+      POSTGRES_PASSWORD: demandes
+    ports:
+      # 5432 est souvent déjà pris sur le poste : on expose 5433.
+      - "${POSTGRES_PORT_HOTE:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demandes -d demandes"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    # Même utilisateur que sur l'hôte : les fichiers écrits dans donnees/ et artefacts/ lui appartiennent.
+    user: "${UID_HOTE:-1000}:${GID_HOTE:-1000}"
+    env_file: .env
+    environment:
+      # Dans le réseau compose, la base s'appelle « postgres » et écoute sur 5432.
+      DATABASE_URL: postgresql://demandes:demandes@postgres:5432/demandes
+    ports:
+      - "${API_PORT_HOTE:-8000}:8000"
+    volumes:
+      - ./donnees:/app/donnees
+      - ./artefacts:/app/artefacts
+      - ./prompts:/app/prompts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Pour joindre une IAG qui tourne sur l'hôte : IAG_BASE_URL=http://host.docker.internal:PORT/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata:

@@ -1,0 +1,11 @@
+# Empreintes SHA-256 des ADR. Ne pas éditer à la main : demandes adr sceller / corriger.
+75210c1f6c40dd71a0ddc679dce92913719630d17add406c8dcd8c2d053f3aef  0001-adr-immuables.md
+2e2816d11cfcc394f695ad3fb05ea77633ce44c6c92fc561f538a857ab988abc  0002-architecture-hexagonale.md
+70f1298ab87e5acb60407ada2cb59c75b6c09d1d9b804ce36d3e2f673f6d2cfe  0003-postgresql-pgvector.md
+7249f20e9108967777b628b4547a3b5af10060a5f0f22deaf722825d869ebaf3  0004-parallelisme.md
+67659b194a679485b9cc27b1583f522510e812a114055eab7c36999b09b149c7  0005-api-fastapi-sans-authentification.md
+bfe3d8fb101f821acc51959c5d6e273b5df0a1fdca23afe28aa9b026ba48a95e  0006-schema-fiche-v1.md
+4abaf270c6dd4bd459c9c0cd079e1ced1992ee6308243c4ed8a79cf200772d1b  0007-empreintes-configuration.md
+e602fd83f142153a42c211f6fdcedaa2651df544c000071b7bad137e9839f587  0008-taches-et-suivi-avancement.md
+a8c57f8c725414254a9f0a55ca150a43e572f2767b9aadde2f7deabd960e0dc7  0009-regles-de-chargement.md
+b916713e7cf48a749179afd9df73ad54debf63faa89aef34e8d9fb290f1e106e  0010-fiches-par-lots-a-l-ingestion.md

@@ -1,0 +1,48 @@
+[project]
+name = "demandes"
+version = "0.1.0"
+description = "Banc d'essai de classification supervisée des demandes ITZME (prédiction du Titre à partir du mail)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "openpyxl>=3.1",
+    "numpy>=1.26",
+    "scikit-learn>=1.5",
+    "joblib>=1.4",
+    "matplotlib>=3.8",
+    "openai>=1.40",
+    "jsonschema>=4.22",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "psycopg[binary,pool]>=3.2",
+    "pgvector>=0.3",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "typer>=0.12",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+demandes = "demandes.adaptateurs.entrants.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/demandes"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "postgres: test d'intégration qui a besoin de la base PostgreSQL de docker compose",
+]
+addopts = "-m 'not postgres'"

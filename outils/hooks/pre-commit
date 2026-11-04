@@ -1,0 +1,15 @@
+#!/bin/sh
+# Refuse le commit si un ADR scellé a été modifié ou supprimé, ou si un ADR n'est pas scellé (ADR-0001).
+# Activation : git config core.hooksPath outils/hooks
+racine=$(git rev-parse --show-toplevel)
+cd "$racine" || exit 1
+PYTHONPATH="$racine/src" python3 -c "
+import sys
+from demandes import adr
+erreurs, non_scelles = adr.verifier()
+for n in non_scelles:
+    print(f'ADR à sceller : {n}  (uv run demandes adr sceller)', file=sys.stderr)
+for e in erreurs:
+    print(f'ERREUR ADR : {e}', file=sys.stderr)
+sys.exit(1 if erreurs or non_scelles else 0)
+"
