@@ -4,8 +4,6 @@ Banc d'essai qui apprend à prédire la catégorie (le **Titre**, ~160 valeurs) 
 partir du mail qui l'a créée. Usage visé : **assistance**. Le modèle propose un Titre ou un top 3,
 et l'opérateur valide toujours.
 
-Ce projet est indépendant de RITA (le pipeline de clustering).
-
 ## État d'avancement
 
 | Étape | Commande | État |

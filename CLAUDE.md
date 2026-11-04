@@ -1,9 +1,9 @@
 ## Projet
 
-Banc d'essai de classification supervisée : prédire le Titre d'une demande ITZME à partir du mail. Sans lien avec RITA : ne pas réutiliser son code. Le code, les identifiants, les commentaires, les messages et les rapports sont en français.
+Banc d'essai de classification supervisée : prédire le Titre d'une demande ITZME à partir du mail. Le code, les identifiants, les commentaires, les messages et les rapports sont en français.
 
 - Architecture hexagonale (docs/adr/0002) : `domaine/` en Python pur ; `apprentissage/` avec numpy/sklearn mais sans I/O ; `ports/` ; `application/` (1 commande = 1 endpoint = 1 classe) ; `adaptateurs/` ; câblage dans `composition.py`. Le cœur n'importe jamais un adaptateur concret.
-- Chaque décision notable donne lieu à un **nouvel ADR** (`uv run demandes adr nouveau "…"`, à rédiger, puis `uv run demandes adr sceller`). Ne jamais modifier un ADR scellé : le remplacer par un nouveau ADR (`--remplace NNNN`). Seules les corrections de forme passent par `demandes adr corriger NNNN --motif "…"`.
+- **Chaque modification** (code, schéma, configuration, exploitation, dépendances, tests) est tracée par un **nouvel ADR** dans le même lot de travail (`uv run demandes adr nouveau "…"`, à rédiger, puis `uv run demandes adr sceller`). Avant de rendre la main, vérifier qu'aucun ADR scellé ne décrit un comportement que le code n'a plus. Ne jamais modifier un ADR scellé : le remplacer par un nouveau ADR (`--remplace NNNN`). Seules les corrections de forme passent par `demandes adr corriger NNNN --motif "…"`.
 - Parallélisme (docs/adr/0004) : processus via `demandes.parallele.map_par_lots` pour le calcul ; asyncio + sémaphore pour l'IAG et l'embedding. Pas de parallélisme imbriqué.
 - Suivi : un cas d'usage ne fait jamais de `print`, il passe par le port `Suivi` (docs/adr/0008).
 - Schéma de la base : nouvelle migration `adaptateurs/sortants/postgres/migrations/NNNN_*.sql`, jamais de modification d'une migration déjà appliquée.

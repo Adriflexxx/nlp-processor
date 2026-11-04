@@ -90,7 +90,7 @@ class DepotTachesMemoire:
     def marquer_interrompues(self) -> int:
         n = 0
         for t in self._taches.values():
-            if t.statut == "en_cours":
+            if t.statut in ("en_cours", "en_attente"):
                 self.echouer(t.id, "interrompue par un redémarrage")
                 n += 1
         return n

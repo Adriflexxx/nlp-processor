@@ -16,5 +16,8 @@ Les corrections de forme sont tracées dans [errata.md](errata.md).
 | 0006 | [Schéma de la fiche v1 et décodage guidé](0006-schema-fiche-v1.md) | 2026-11-03 | Remplacée par ADR-0010 |
 | 0007 | [Empreintes de configuration à deux niveaux](0007-empreintes-configuration.md) | 2026-11-03 | Acceptée |
 | 0008 | [Tâches de fond et journal d'avancement détaillé](0008-taches-et-suivi-avancement.md) | 2026-11-03 | Acceptée |
-| 0009 | [Règles de chargement, de contrôle et de repérage des templates](0009-regles-de-chargement.md) | 2026-11-03 | Acceptée |
+| 0009 | [Règles de chargement, de contrôle et de repérage des templates](0009-regles-de-chargement.md) | 2026-11-03 | Remplacée par ADR-0011 |
 | 0010 | [Fiches produites par lots à l'ingestion](0010-fiches-par-lots-a-l-ingestion.md) | 2026-11-04 | Acceptée |
+| 0011 | [Règles de chargement, de contrôle et de repérage des templates (v2)](0011-regles-de-chargement-v2.md) | 2026-11-04 | Acceptée |
+| 0012 | [Exploitation du service dans Docker](0012-exploitation-docker.md) | 2026-11-04 | Acceptée |
+| 0013 | [Stratégie de tests](0013-strategie-de-tests.md) | 2026-11-04 | Acceptée |
